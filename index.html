@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
 <title>SwingTrader Pro</title>
 <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Unbounded:wght@800;900&display=swap" rel="stylesheet"/>
 <style>
@@ -114,110 +117,16 @@ input::placeholder{color:var(--faint)!important}
 .of-box{background:#040e18;border:1px solid #0d2840;border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:11px}
 .nowarn{display:none;margin-top:9px;padding:8px 10px;background:#140408;border:1px solid #3a0a10;border-radius:6px;color:#a03040;font-size:11px}
 
-/* ── PASSWORD GATE ── */
-#gate{position:fixed;inset:0;background:#05070f;display:flex;align-items:center;justify-content:center;z-index:99999;flex-direction:column}
-#gate-box{background:#060c1c;border:1px solid #0d1228;border-radius:16px;padding:40px 36px;width:340px;text-align:center}
-#gate-logo{font-family:'Unbounded',sans-serif;font-size:22px;font-weight:900;color:#fff;letter-spacing:1px;margin-bottom:6px}
-#gate-logo span{color:#4d7fff}
-#gate-sub{color:#253060;font-size:11px;margin-bottom:28px;font-family:'Fira Code',monospace}
-#gate-input{width:100%;background:#080c1c!important;border:1px solid #182040!important;color:#cdd8f0!important;font-family:'Fira Code',monospace!important;font-size:14px!important;border-radius:8px!important;padding:12px 14px!important;outline:none!important;text-align:center;letter-spacing:3px;margin-bottom:12px}
-#gate-input:focus{border-color:#4d7fff!important}
-#gate-btn{width:100%;background:linear-gradient(135deg,#1a3bff,#4d7fff);border:none;border-radius:8px;padding:12px;color:#fff;font-family:'Fira Code',monospace;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer;transition:filter .15s}
-#gate-btn:hover{filter:brightness(1.15)}
-#gate-err{color:#ff3d6b;font-size:11px;margin-top:10px;height:16px;font-family:'Fira Code',monospace}
-#gate-hint{color:#1a2240;font-size:9px;margin-top:18px;font-family:'Fira Code',monospace}
 #app{display:none}
 
-/* PASSWORD GATE */
-#gate input:focus{border-color:#4d7fff!important;box-shadow:0 0 0 2px #4d7fff22!important;}
-#gate input{transition:border-color 0.2s;}
-#gateBtn:hover{filter:brightness(1.15);}
-#gateBtn:active{transform:scale(0.97);}
 </style>
 </head>
 <body>
 
-<!-- PASSWORD GATE — change the password below -->
-<div id="gate" style="position:fixed;inset:0;background:#05070f;display:flex;align-items:center;justify-content:center;z-index:99999;font-family:'Fira Code',monospace">
-  <div style="background:#060c1c;border:1px solid #0d1228;border-radius:14px;padding:40px 36px;width:340px;text-align:center">
-    <div style="font-family:'Unbounded',sans-serif;font-size:20px;font-weight:900;color:#fff;margin-bottom:4px">SWING<span style="color:#4d7fff">TR</span></div>
-    <div style="color:#253060;font-size:10px;letter-spacing:2px;margin-bottom:28px">PRIVATE ACCESS</div>
-    <div style="position:relative;margin-bottom:12px">
-      <input type="password" id="gateInput" placeholder="Enter password"
-        style="width:100%;background:#080c1c!important;border:1px solid #182040!important;color:#cdd8f0!important;
-               font-family:'Fira Code',monospace!important;font-size:14px!important;border-radius:8px!important;
-               padding:12px 14px!important;outline:none!important;text-align:center;letter-spacing:3px"/>
-    </div>
-    <button id="gateBtn"
-      style="width:100%;background:linear-gradient(135deg,#1a3bff,#4d7fff);border:none;border-radius:8px;
-             padding:12px;color:#fff;font-family:'Fira Code',monospace;font-size:13px;font-weight:700;
-             letter-spacing:1px;cursor:pointer;margin-bottom:10px">
-      ENTER →
-    </button>
-    <div id="gateErr" style="color:#ff3d6b;font-size:11px;min-height:16px"></div>
-    <div style="color:#1a2a50;font-size:9px;margin-top:18px;letter-spacing:1px">SWINGTRADER PRO · PRIVATE</div>
-  </div>
-</div>
-<script>
-(function(){
-  // ── SET YOUR PASSWORD HERE ──
-  var PASSWORD = 'swing2024';
-  // ───────────────────────────
-
-  var SESSION_KEY = 'stp_auth';
-
-  function unlock(){
-    sessionStorage.setItem(SESSION_KEY,'1');
-    var gate=document.getElementById('gate');
-    gate.style.opacity='0';
-    gate.style.transition='opacity 0.4s ease';
-    setTimeout(function(){gate.style.display='none';},400);
-  }
-
-  // Already authenticated this session?
-  if(sessionStorage.getItem(SESSION_KEY)==='1'){ 
-    document.getElementById('gate').style.display='none';
-    return;
-  }
-
-  function attempt(){
-    var val=document.getElementById('gateInput').value;
-    if(val===PASSWORD){
-      unlock();
-    } else {
-      var err=document.getElementById('gateErr');
-      err.textContent='Incorrect password';
-      var inp=document.getElementById('gateInput');
-      inp.style.borderColor='#ff3d6b!important';
-      inp.value='';
-      setTimeout(function(){err.textContent='';},2500);
-    }
-  }
-
-  document.getElementById('gateBtn').addEventListener('click',attempt);
-  document.getElementById('gateInput').addEventListener('keydown',function(e){
-    if(e.key==='Enter') attempt();
-  });
-
-  // Focus the input on load
-  setTimeout(function(){ document.getElementById('gateInput').focus(); },100);
-})();
-</script>
-
-<!-- PASSWORD GATE -->
-<div id="gate">
-  <div id="gate-box">
-    <div id="gate-logo">SWING<span>TR</span></div>
-    <div id="gate-sub">PRIVATE ACCESS ONLY</div>
-    <input type="password" id="gate-input" placeholder="Enter password" autocomplete="off" autocorrect="off" spellcheck="false"/>
-    <button id="gate-btn">UNLOCK</button>
-    <div id="gate-err"></div>
-    <div id="gate-hint">Authorised users only</div>
-  </div>
 </div>
 
 <!-- APP (hidden until unlocked) -->
-<div id="app">
+
 <div id="hdr">
   <div style="display:flex;align-items:center;gap:9px">
     <div id="hdot" style="width:9px;height:9px;border-radius:50%;background:var(--blue);box-shadow:0 0 9px var(--blue)"></div>
@@ -1622,61 +1531,11 @@ async function runBacktest(){
 
 // ══════════════════════════════════════════════════════
 // INIT
-// ══════════════════════════════════════════════════════
-// Init called by gate after password unlock — see GATE JS below
-
-// ══════════════════════════════════════════════════════
-// PASSWORD GATE
-// To change password: hash your new password with SHA-256
-// at https://emn178.github.io/online-tools/sha256.html
-// then replace the PW_HASH value below.
-// Default password: SwingTR2025!
-// SHA-256 of SwingTR2025! = 98cd293447f256d8...
-// ══════════════════════════════════════════════════════
-var PW_HASH = '98cd293447f256d8ba7b9db659bb114ccd25839db10297c711748c36312f8bbd';
-
-async function hashPassword(pw){
-  var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
-  return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
-}
-
-async function tryUnlock(){
-  var pw = document.getElementById('gate-input').value;
-  if(!pw){ document.getElementById('gate-err').textContent='Enter your password'; return; }
-  var h = await hashPassword(pw);
-  if(h === PW_HASH){
-    // Correct — hide gate, show app
-    document.getElementById('gate').style.display='none';
-    document.getElementById('app').style.display='';
-    // Run app init now that it's visible
-    loadKeys();
-    refreshAlpaca();
-    addLog('SwingTrader Pro ready. Alpaca Market Data + Finnhub + Telegram.','info');
-    addLog('Add your API keys in Settings, pick a strategy mode, then RUN SCREEN.','info');
-  } else {
-    document.getElementById('gate-err').textContent='Incorrect password';
-    document.getElementById('gate-input').value='';
-    document.getElementById('gate-input').focus();
-    // Shake animation
-    var box = document.getElementById('gate-box');
-    box.style.animation='shake 0.4s ease';
-    setTimeout(function(){ box.style.animation=''; }, 400);
-  }
-}
-
-document.getElementById('gate-btn').addEventListener('click', tryUnlock);
-document.getElementById('gate-input').addEventListener('keydown', function(e){
-  if(e.key==='Enter') tryUnlock();
-  document.getElementById('gate-err').textContent='';
-});
-
-// Shake keyframe
-var shakeStyle = document.createElement('style');
-shakeStyle.textContent = '@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}';
-document.head.appendChild(shakeStyle);
-
+// INIT
+loadKeys();
+refreshAlpaca();
+addLog('SwingTrader Pro ready. Alpaca Market Data + Finnhub + Telegram.','info');
+addLog('Add your API keys in ⚙ Settings, pick a strategy mode, then RUN SCREEN.','info');
 </script>
 
-</div><!-- /app -->
 </body>
-</html>
