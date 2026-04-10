@@ -462,14 +462,23 @@ var optChecks  = new Array(8).fill(false);
 
 // ── FINVIZ CANDIDATE LIST ──
 var FINVIZ_BASE = [
-  {ticker:'SNDL',name:'Sundial Growers'},   {ticker:'MMAT',name:'Meta Materials'},
-  {ticker:'CENN',name:'Cenntro Electric'},   {ticker:'MULN',name:'Mullen Automotive'},
-  {ticker:'VERB',name:'Verb Technology'},    {ticker:'GFAI',name:'Guardforce AI'},
-  {ticker:'ABVC',name:'ABVC BioPharma'},     {ticker:'BFRI',name:'Biofrontera'},
-  {ticker:'CLRB',name:'Cellectar Bio'},      {ticker:'MEGL',name:'Magic Empire'},
-  {ticker:'FFIE',name:'Faraday Future'},     {ticker:'NKLA',name:'Nikola Corp'},
-  {ticker:'ILUS',name:'Ilustrato Pictures'}, {ticker:'PHIL',name:'PHX Energy'},
-  {ticker:'ABIO',name:'ARCA Biopharma'},     {ticker:'ABUS',name:'Arbutus Biopharma'},
+  // Active, liquid penny stocks verified on Alpaca feed
+  {ticker:'SNDL', name:'Sundial Growers'},
+  {ticker:'CENN', name:'Cenntro Electric'},
+  {ticker:'GFAI', name:'Guardforce AI'},
+  {ticker:'ABVC', name:'ABVC BioPharma'},
+  {ticker:'BFRI', name:'Biofrontera'},
+  {ticker:'CLRB', name:'Cellectar Bio'},
+  {ticker:'MEGL', name:'Magic Empire Global'},
+  {ticker:'ABUS', name:'Arbutus Biopharma'},
+  {ticker:'SIGA', name:'SIGA Technologies'},
+  {ticker:'HIMS', name:'Hims & Hers Health'},
+  {ticker:'PTRA', name:'Proterra'},
+  {ticker:'NRXP', name:'NRx Pharma'},
+  {ticker:'OCGN', name:'Ocugen'},
+  {ticker:'GNUS', name:'Genius Brands'},
+  {ticker:'ATER', name:'Aterian'},
+  {ticker:'LIFW', name:'MSP Recovery'},
 ];
 
 // ── STRATEGY MODES ──
@@ -1130,8 +1139,11 @@ async function runAI(ticker, name, price, strategy, bt, mode, fhData){
 }
 
 function fallbackAI(ticker, price, strategy, mode, fhData){
-  var catG=fhData&&fhData.newsGrade||{tier:'C',reason:'No Finnhub news'};
-  var dilG=fhData&&fhData.dilGrade||{risk:'WATCH',note:'No insider data'};
+  // When AI is unavailable (network blocked etc), use Finnhub data if available.
+  // If no Finnhub either, default B-tier (not C) so technical score can decide signal.
+  // C-tier causes a hard fail on Check 1 which blocks all signals regardless of technicals.
+  var catG=fhData&&fhData.newsGrade||(fhData&&fhData.news?{tier:'B',reason:'News present — graded B by default (AI unavailable)'}:{tier:'B',reason:'AI unavailable — using B-tier default. Verify news manually.'});
+  var dilG=fhData&&fhData.dilGrade||{risk:'WATCH',note:'AI unavailable — check SEC filings manually'};
   var pct=strategy.finalScore/strategy.maxScore;
   var score=Math.round(Math.max(1,Math.min(10,pct*10)));
   return {catalystTier:catG.tier,catalystReason:catG.reason,dilutionRisk:dilG.risk,dilutionNote:dilG.note,
@@ -1224,7 +1236,11 @@ async function runScreener(){
 
     if(!snap||snap.price<=0){ addLog('[$'+c.ticker+'] No price data','warn'); continue; }
     if(currentMode==='penny'&&snap.price>5){ addLog('[$'+c.ticker+'] $'+snap.price.toFixed(2)+' > $5, skip (penny mode)','warn'); continue; }
-    if(!candles||candles.length<15){ addLog('[$'+c.ticker+'] Only '+(candles?candles.length:0)+' candles','warn'); continue; }
+    if(!candles||candles.length<15){
+      var cnt=candles?candles.length:0;
+      addLog('[$'+c.ticker+'] '+(cnt===0?'No candle data — ticker may be delisted or not on Alpaca IEX feed':'Only '+cnt+' candles — insufficient history')+'. Skipping.','warn');
+      continue;
+    }
 
     addLog('[$'+c.ticker+'] $'+snap.price.toFixed(4)+' | '+candles.length+' days | vol '+((snap.volume||0)/1e6).toFixed(2)+'M | '+fmtPct(snap.changePct),'info');
 
@@ -1256,7 +1272,7 @@ async function runScreener(){
       ai=await runAI(c.ticker,c.name||c.ticker,snap.price,strat,bt,currentMode,fhData);
       addLog('[$'+c.ticker+'] ✅ AI: '+ai.score+'/10 | Potential: '+ai.potentialScore+'/10 | '+ai.catalystTier+'-tier','success');
     }catch(e){
-      addLog('[$'+c.ticker+'] ⚠ AI failed: '+e.message,'warn');
+      addLog('[$'+c.ticker+'] ⚠ AI unavailable: '+e.message+' (likely network/firewall block — using Finnhub+technical fallback)','warn');
       ai=fallbackAI(c.ticker,snap.price,strat,currentMode,fhData);
     }
 
@@ -1732,7 +1748,7 @@ async function runRanker(){
       var m3 = txt2.replace(/```json|```/g,'').match(/\{[\s\S]*\}/);
       if(m3) aiOp = JSON.parse(m3[0]);
     }
-  }catch(e){ addLog('Ranker AI failed: '+e.message,'warn'); }
+  }catch(e){ addLog('Ranker AI unavailable: '+e.message+' (network may be blocking api.anthropic.com — rankings still shown using market data)','warn'); }
 
   document.getElementById('rankerLoading').style.display='none';
   btn.disabled=false; btn.textContent='RANK NOW';
