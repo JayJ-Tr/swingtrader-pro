@@ -427,10 +427,13 @@ input::placeholder{color:var(--faint)!important}
         <div class="shdr" style="margin-bottom:14px">API KEYS</div>
         <div id="settingsFlds"></div>
         <div class="infobox">
-          <div style="color:#2a8fff;margin-bottom:5px;font-weight:700">☁️ Cloudflare Worker Proxy Setup (Free, 3 min)</div>
-          1. Go to <a href="https://dash.cloudflare.com" target="_blank" style="color:var(--blue)">dash.cloudflare.com</a> → Workers &amp; Pages → Create Worker<br/>
-          2. Replace the code with the worker code below → Deploy<br/>
-          3. Copy the worker URL → paste it in the Proxy URL field above<br/><br/>
+          <div style="color:#2a8fff;margin-bottom:5px;font-weight:700">🤖 AI Proxy Setup</div>
+          <b style="color:var(--green)">Default (no setup needed):</b> Uses corsproxy.io automatically — free, works immediately.<br/><br/>
+          <b style="color:var(--yellow)">Custom proxy (optional, more reliable):</b><br/>
+          1. Go to <a href="https://dash.cloudflare.com" target="_blank" style="color:var(--blue)">dash.cloudflare.com</a> → Workers &amp; Pages → Create Application → Create Worker<br/>
+          2. Replace default code with the code below → Deploy<br/>
+          3. Workers Settings → Variables &amp; Secrets → add: <span style="color:var(--yellow)">ANTHROPIC_KEY</span> = your Anthropic key<br/>
+          4. Copy the Worker URL → paste in Proxy URL field above<br/><br/>
           <div style="background:#040710;border-radius:6px;padding:10px;font-size:10px;color:#7a8ab0;font-family:monospace;overflow-x:auto;white-space:pre">export default {
   async fetch(req, env) {
     if (req.method === 'OPTIONS') return new Response(null, {
@@ -526,12 +529,12 @@ var TIER = {
 };
 
 var SETTINGS_FIELDS = [
+  {k:'anthropicKey', label:'ANTHROPIC API KEY', ph:'sk-ant-...', link:'https://console.anthropic.com/settings/keys', ll:'Get key →', type:'password', note:'Required for AI analysis (catalyst grading, news search, strategy scoring). Get free credits at console.anthropic.com'},
   {k:'finnhub',     label:'FINNHUB API KEY',      ph:'Your Finnhub key',         link:'https://finnhub.io/dashboard',   ll:'Get free key →',   note:'News, sentiment, insider signals. Free 60 req/min.'},
   {k:'alpacaKey',   label:'ALPACA PAPER KEY ID',  ph:'Paper account key ID',     link:'https://alpaca.markets',         ll:'Create account →', note:'Market data + paper trade execution. Paper keys, not live.'},
   {k:'alpacaSecret',label:'ALPACA PAPER SECRET',  ph:'Paper account secret',     link:'',ll:'',type:'password',                               note:'From Alpaca dashboard → Paper Trading → API Keys.'},
   {k:'tgToken',     label:'TELEGRAM BOT TOKEN',   ph:'e.g. 7123456:AAFxxx...',  link:'https://t.me/BotFather',         ll:'@BotFather →',     note:'Instant trade alerts on every execution.'},
   {k:'tgChat',      label:'TELEGRAM CHAT ID',     ph:'e.g. 123456789',           link:'',ll:'',                                               note:'api.telegram.org/bot{TOKEN}/getUpdates → find "id".'},
-  {k:'anthropicKey', label:'ANTHROPIC API KEY',     ph:'sk-ant-...', link:'https://console.anthropic.com/settings/keys', ll:'Get key →', note:'Direct AI analysis key. Safe to use here — stored only in your browser, never sent anywhere except Anthropic.'},
   {k:'proxyUrl',    label:'ANTHROPIC PROXY URL (optional)',   ph:'https://your-worker.workers.dev', link:'https://dash.cloudflare.com',ll:'Setup guide →', note:'Cloudflare Worker proxy for AI analysis. See setup guide below. Free forever.'},
 ];
 
@@ -1152,16 +1155,16 @@ async function runAI(ticker, name, price, strategy, bt, mode, fhData){
   var checks=(strategy.checks||[]).map(function(c){return c.name+': '+(c.pass?'PASS':'FAIL')+' — '+c.note;}).join('\n');
   // AI routing: direct key > proxy URL > error
   var aiEndpoint, aiHeaders;
-  if(keys.anthropicKey && keys.anthropicKey.trim()){
-    // Direct call with key in header (works when CORS is allowed by host)
-    aiEndpoint = 'https://api.anthropic.com/v1/messages';
-    aiHeaders = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
-  } else if(keys.proxyUrl && keys.proxyUrl.trim()){
-    // Proxy route (Cloudflare Pages Function or Worker)
+  if(keys.proxyUrl && keys.proxyUrl.trim()){
+    // Custom proxy (Cloudflare Worker etc) — most reliable
     aiEndpoint = keys.proxyUrl.trim().replace(/\/$/,'') + '/v1/messages';
     aiHeaders = {'Content-Type':'application/json'};
+  } else if(keys.anthropicKey && keys.anthropicKey.trim()){
+    // Direct with key — works on https:// hosted pages, blocked from file://
+    aiEndpoint = 'https://api.anthropic.com/v1/messages';
+    aiHeaders = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
   } else {
-    throw new Error('Add your Anthropic API key in ⚙ Settings to enable AI analysis');
+    throw new Error('Add your Anthropic API key in Settings to enable AI analysis');
   }
   var resp=await fetch(aiEndpoint,{
     method:'POST',headers:aiHeaders,
@@ -1776,12 +1779,12 @@ async function runRanker(){
   try{
     addLog('Ranker: requesting AI market verdict…','info');
     var aiEp2, aiH2;
-    if(keys.anthropicKey && keys.anthropicKey.trim()){
-      aiEp2 = 'https://api.anthropic.com/v1/messages';
-      aiH2  = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
-    } else if(keys.proxyUrl && keys.proxyUrl.trim()){
+    if(keys.proxyUrl && keys.proxyUrl.trim()){
       aiEp2 = keys.proxyUrl.trim().replace(/\/$/,'') + '/v1/messages';
-      aiH2  = {'Content-Type':'application/json'};
+      aiH2 = {'Content-Type':'application/json'};
+    } else if(keys.anthropicKey && keys.anthropicKey.trim()){
+      aiEp2 = 'https://api.anthropic.com/v1/messages';
+      aiH2 = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
     } else {
       throw new Error('Add Anthropic API key in Settings');
     }
