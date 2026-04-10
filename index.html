@@ -472,7 +472,7 @@ input::placeholder{color:var(--faint)!important}
 // ════════════════════════════════════════════════════════
 // STATE
 // ════════════════════════════════════════════════════════
-var keys       = {finnhub:'', alpacaKey:'', alpacaSecret:'', tgToken:'', tgChat:'', proxyUrl:''};
+var keys       = {finnhub:'', alpacaKey:'', alpacaSecret:'', tgToken:'', tgChat:'', proxyUrl:'', anthropicKey:''};
 var stocks     = [];
 var tradeLog   = [];
 var positions  = [];
@@ -531,7 +531,8 @@ var SETTINGS_FIELDS = [
   {k:'alpacaSecret',label:'ALPACA PAPER SECRET',  ph:'Paper account secret',     link:'',ll:'',type:'password',                               note:'From Alpaca dashboard → Paper Trading → API Keys.'},
   {k:'tgToken',     label:'TELEGRAM BOT TOKEN',   ph:'e.g. 7123456:AAFxxx...',  link:'https://t.me/BotFather',         ll:'@BotFather →',     note:'Instant trade alerts on every execution.'},
   {k:'tgChat',      label:'TELEGRAM CHAT ID',     ph:'e.g. 123456789',           link:'',ll:'',                                               note:'api.telegram.org/bot{TOKEN}/getUpdates → find "id".'},
-  {k:'proxyUrl',    label:'ANTHROPIC PROXY URL',   ph:'https://your-worker.workers.dev', link:'https://dash.cloudflare.com',ll:'Setup guide →', note:'Cloudflare Worker proxy for AI analysis. See setup guide below. Free forever.'},
+  {k:'anthropicKey', label:'ANTHROPIC API KEY',     ph:'sk-ant-...', link:'https://console.anthropic.com/settings/keys', ll:'Get key →', note:'Direct AI analysis key. Safe to use here — stored only in your browser, never sent anywhere except Anthropic.'},
+  {k:'proxyUrl',    label:'ANTHROPIC PROXY URL (optional)',   ph:'https://your-worker.workers.dev', link:'https://dash.cloudflare.com',ll:'Setup guide →', note:'Cloudflare Worker proxy for AI analysis. See setup guide below. Free forever.'},
 ];
 
 // ── OPTIONS CHECKLIST ITEMS ──
@@ -663,7 +664,7 @@ function buildSettings(){
 
 function saveKeys(){
   SETTINGS_FIELDS.forEach(function(f){ var el=document.getElementById('k_'+f.k); if(el) keys[f.k]=el.value.trim()||''; });
-  try{ localStorage.setItem('stp_v12',JSON.stringify(keys)); }catch(e){}
+  try{ localStorage.setItem('stp_v13',JSON.stringify(keys)); }catch(e){}
   buildSettings(); updateKeyUI();
   showToast('✅ Keys saved','success');
   addLog('Keys — Finnhub:'+(keys.finnhub?'✓':'✗')+' Alpaca:'+(keys.alpacaKey?'✓':'✗')+' TG:'+(keys.tgToken?'✓':'✗'),'success');
@@ -672,7 +673,7 @@ function saveKeys(){
 }
 
 function loadKeys(){
-  try{ var s=localStorage.getItem('stp_v12'); if(s) keys=JSON.parse(s); }catch(e){}
+  try{ var s=localStorage.getItem('stp_v13'); if(s) keys=JSON.parse(s); }catch(e){}
   try{ var w=localStorage.getItem('stp_wl11'); if(w) watchlist=JSON.parse(w); }catch(e){}
   buildSettings(); updateKeyUI(); renderWatchlist();
 }
@@ -1149,13 +1150,21 @@ async function runAI(ticker, name, price, strategy, bt, mode, fhData){
   var btS=bt&&bt.count?bt.count+' trades, '+(bt.winRate!=null?bt.winRate+'% WR':'WR pending ≥5 trades')+', '+bt.avgReturn+'% avg':'no backtest data';
   var fhCtx=fhData?'Finnhub catalyst='+((fhData.newsGrade&&fhData.newsGrade.tier)||'?')+' dilution='+((fhData.dilGrade&&fhData.dilGrade.risk)||'?')+' sentiment='+fmt(fhData.sentiment&&fhData.sentiment.score,2):'no Finnhub';
   var checks=(strategy.checks||[]).map(function(c){return c.name+': '+(c.pass?'PASS':'FAIL')+' — '+c.note;}).join('\n');
-  // Use proxy if configured (needed when calling from browser — CORS)
-  // Otherwise try direct (works from localhost/some hosts)
-  var aiEndpoint = (keys.proxyUrl && keys.proxyUrl.trim())
-    ? keys.proxyUrl.trim().replace(/\/$/, '') + '/v1/messages'
-    : 'https://api.anthropic.com/v1/messages';
+  // AI routing: direct key > proxy URL > error
+  var aiEndpoint, aiHeaders;
+  if(keys.anthropicKey && keys.anthropicKey.trim()){
+    // Direct call with key in header (works when CORS is allowed by host)
+    aiEndpoint = 'https://api.anthropic.com/v1/messages';
+    aiHeaders = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
+  } else if(keys.proxyUrl && keys.proxyUrl.trim()){
+    // Proxy route (Cloudflare Pages Function or Worker)
+    aiEndpoint = keys.proxyUrl.trim().replace(/\/$/,'') + '/v1/messages';
+    aiHeaders = {'Content-Type':'application/json'};
+  } else {
+    throw new Error('Add your Anthropic API key in ⚙ Settings to enable AI analysis');
+  }
   var resp=await fetch(aiEndpoint,{
-    method:'POST',headers:{'Content-Type':'application/json'},
+    method:'POST',headers:aiHeaders,
     body:JSON.stringify({
       model:'claude-sonnet-4-20250514',max_tokens:900,
       tools:[{type:'web_search_20250305',name:'web_search'}],
@@ -1766,11 +1775,18 @@ async function runRanker(){
   var rnkSumm = rankings.map(function(r,i){ return (i+1)+'. '+r.label+' ('+r.score+'/100)'; }).join(', ');
   try{
     addLog('Ranker: requesting AI market verdict…','info');
-    var aiEp2 = (keys.proxyUrl && keys.proxyUrl.trim())
-      ? keys.proxyUrl.trim().replace(/\/$/, '') + '/v1/messages'
-      : 'https://api.anthropic.com/v1/messages';
+    var aiEp2, aiH2;
+    if(keys.anthropicKey && keys.anthropicKey.trim()){
+      aiEp2 = 'https://api.anthropic.com/v1/messages';
+      aiH2  = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
+    } else if(keys.proxyUrl && keys.proxyUrl.trim()){
+      aiEp2 = keys.proxyUrl.trim().replace(/\/$/,'') + '/v1/messages';
+      aiH2  = {'Content-Type':'application/json'};
+    } else {
+      throw new Error('Add Anthropic API key in Settings');
+    }
     var resp2 = await fetch(aiEp2,{
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method:'POST', headers:aiH2,
       body: JSON.stringify({
         model:'claude-sonnet-4-20250514', max_tokens:600,
         tools:[{type:'web_search_20250305',name:'web_search'}],
