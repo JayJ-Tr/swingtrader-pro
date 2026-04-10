@@ -1187,12 +1187,16 @@ function fallbackAI(ticker, price, strategy, mode, fhData){
   // When AI is unavailable (network blocked etc), use Finnhub data if available.
   // If no Finnhub either, default B-tier (not C) so technical score can decide signal.
   // C-tier causes a hard fail on Check 1 which blocks all signals regardless of technicals.
-  var catG=fhData&&fhData.newsGrade||(fhData&&fhData.news?{tier:'B',reason:'News present — graded B by default (AI unavailable)'}:{tier:'B',reason:'AI unavailable — using B-tier default. Verify news manually.'});
+  // Use Finnhub catalyst grade if available — it's real data
+  // If no Finnhub news at all, use B-tier so technical score can decide (not C which hard-fails)
+  var catG = (fhData && fhData.newsGrade) ? fhData.newsGrade
+           : (fhData && fhData.news && fhData.news.length) ? {tier:'B', reason:'News found via Finnhub — verify catalyst'}
+           : {tier:'B', reason:'No news data — B-tier default, verify manually'};
   var dilG=fhData&&fhData.dilGrade||{risk:'WATCH',note:'AI unavailable — check SEC filings manually'};
   var pct=strategy.finalScore/strategy.maxScore;
   var score=Math.round(Math.max(1,Math.min(10,pct*10)));
-  return {catalystTier:catG.tier,catalystReason:catG.reason,dilutionRisk:dilG.risk,dilutionNote:dilG.note,
-    score:score,potentialScore:strategy.potentialScore||score,potentialReason:'Based on technical signals only',
+  return {_isFallback:true,catalystTier:catG.tier,catalystReason:catG.reason,dilutionRisk:dilG.risk,dilutionNote:dilG.note,
+    score:score,potentialScore:strategy.potentialScore||score,potentialReason:'Based on technical + Finnhub signals',
     buyZone:fmtU(price*0.92)+'–'+fmtU(price*1.05),target1:strategy.target1,target2:strategy.target2,stopLoss:strategy.stopLoss,
     timeframe:'2–6 weeks',upside:'2x–4x',
     analysis:'Technical signals show '+strategy.signal+' for $'+ticker+' on '+((MODES[mode]&&MODES[mode].label)||mode)+'.',
@@ -1317,12 +1321,16 @@ async function runScreener(){
       ai=await runAI(c.ticker,c.name||c.ticker,snap.price,strat,bt,currentMode,fhData);
       addLog('[$'+c.ticker+'] ✅ AI: '+ai.score+'/10 | Potential: '+ai.potentialScore+'/10 | '+ai.catalystTier+'-tier','success');
     }catch(e){
-      addLog('[$'+c.ticker+'] ⚠ AI unavailable: '+e.message+' (likely network/firewall block — using Finnhub+technical fallback)','warn');
+      addLog('[$'+c.ticker+'] AI offline — using Finnhub+technical signals','info');
       ai=fallbackAI(c.ticker,snap.price,strat,currentMode,fhData);
     }
 
-    // Re-run strategy with AI-refined catalyst/dilution
-    var finalStrat=runStrategy(allC,ai.catalystTier,ai.dilutionRisk,mood,currentMode,fhData.sentiment);
+    // Only re-run strategy with AI data if AI actually succeeded (not fallback)
+    // Fallback AI uses B-tier by default but Finnhub may have graded C-tier
+    // causing hard fail on Check 1 — so keep the initial strategy in that case
+    var finalStrat = (ai._isFallback && strat.signal !== 'AVOID')
+      ? strat  // keep initial technical strategy when AI failed
+      : runStrategy(allC, ai.catalystTier, ai.dilutionRisk, mood, currentMode, fhData.sentiment);
 
     // Log strong signals
     if(['BUY','STRONG BUY'].indexOf(finalStrat.signal)>=0){
@@ -1803,7 +1811,7 @@ async function runRanker(){
       var m3 = txt2.replace(/```json|```/g,'').match(/\{[\s\S]*\}/);
       if(m3) aiOp = JSON.parse(m3[0]);
     }
-  }catch(e){ addLog('Ranker AI unavailable: '+e.message+' (network may be blocking api.anthropic.com — rankings still shown using market data)','warn'); }
+  }catch(e){ addLog('Ranker: AI offline — showing data-based rankings only','info'); }
 
   document.getElementById('rankerLoading').style.display='none';
   btn.disabled=false; btn.textContent='RANK NOW';
