@@ -427,6 +427,33 @@ input::placeholder{color:var(--faint)!important}
         <div class="shdr" style="margin-bottom:14px">API KEYS</div>
         <div id="settingsFlds"></div>
         <div class="infobox">
+          <div style="color:#2a8fff;margin-bottom:5px;font-weight:700">☁️ Cloudflare Worker Proxy Setup (Free, 3 min)</div>
+          1. Go to <a href="https://dash.cloudflare.com" target="_blank" style="color:var(--blue)">dash.cloudflare.com</a> → Workers &amp; Pages → Create Worker<br/>
+          2. Replace the code with the worker code below → Deploy<br/>
+          3. Copy the worker URL → paste it in the Proxy URL field above<br/><br/>
+          <div style="background:#040710;border-radius:6px;padding:10px;font-size:10px;color:#7a8ab0;font-family:monospace;overflow-x:auto;white-space:pre">export default {
+  async fetch(req, env) {
+    if (req.method === 'OPTIONS') return new Response(null, {
+      headers: { 'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST' }
+    });
+    const body = await req.json();
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json',
+        'x-api-key': env.ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'messages-2023-12-15' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    return Response.json(data, { headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
+};</div>
+          4. In your Worker settings → Variables → add secret: <span style="color:var(--yellow)">ANTHROPIC_KEY</span> = your Anthropic API key
+        </div>
+        <div class="infobox" style="margin-top:8px">
           <div style="color:#2a8fff;margin-bottom:5px;font-weight:700">📱 Telegram Chat ID</div>
           1. Message <span style="color:var(--yellow)">@BotFather</span> → /newbot → copy token<br/>
           2. Send any message to your bot<br/>
@@ -445,7 +472,7 @@ input::placeholder{color:var(--faint)!important}
 // ════════════════════════════════════════════════════════
 // STATE
 // ════════════════════════════════════════════════════════
-var keys       = {finnhub:'', alpacaKey:'', alpacaSecret:'', tgToken:'', tgChat:''};
+var keys       = {finnhub:'', alpacaKey:'', alpacaSecret:'', tgToken:'', tgChat:'', proxyUrl:''};
 var stocks     = [];
 var tradeLog   = [];
 var positions  = [];
@@ -472,13 +499,13 @@ var FINVIZ_BASE = [
   {ticker:'MEGL', name:'Magic Empire Global'},
   {ticker:'ABUS', name:'Arbutus Biopharma'},
   {ticker:'SIGA', name:'SIGA Technologies'},
-  {ticker:'HIMS', name:'Hims & Hers Health'},
-  {ticker:'PTRA', name:'Proterra'},
   {ticker:'NRXP', name:'NRx Pharma'},
   {ticker:'OCGN', name:'Ocugen'},
-  {ticker:'GNUS', name:'Genius Brands'},
   {ticker:'ATER', name:'Aterian'},
-  {ticker:'LIFW', name:'MSP Recovery'},
+  {ticker:'VERB', name:'Verb Technology'},
+  {ticker:'NAKD', name:'Naked Brand'},
+  {ticker:'CIDM', name:'Cinedigm'},
+  {ticker:'MVST', name:'Microvast Holdings'},
 ];
 
 // ── STRATEGY MODES ──
@@ -504,6 +531,7 @@ var SETTINGS_FIELDS = [
   {k:'alpacaSecret',label:'ALPACA PAPER SECRET',  ph:'Paper account secret',     link:'',ll:'',type:'password',                               note:'From Alpaca dashboard → Paper Trading → API Keys.'},
   {k:'tgToken',     label:'TELEGRAM BOT TOKEN',   ph:'e.g. 7123456:AAFxxx...',  link:'https://t.me/BotFather',         ll:'@BotFather →',     note:'Instant trade alerts on every execution.'},
   {k:'tgChat',      label:'TELEGRAM CHAT ID',     ph:'e.g. 123456789',           link:'',ll:'',                                               note:'api.telegram.org/bot{TOKEN}/getUpdates → find "id".'},
+  {k:'proxyUrl',    label:'ANTHROPIC PROXY URL',   ph:'https://your-worker.workers.dev', link:'https://dash.cloudflare.com',ll:'Setup guide →', note:'Cloudflare Worker proxy for AI analysis. See setup guide below. Free forever.'},
 ];
 
 // ── OPTIONS CHECKLIST ITEMS ──
@@ -635,7 +663,7 @@ function buildSettings(){
 
 function saveKeys(){
   SETTINGS_FIELDS.forEach(function(f){ var el=document.getElementById('k_'+f.k); if(el) keys[f.k]=el.value.trim()||''; });
-  try{ localStorage.setItem('stp_v11',JSON.stringify(keys)); }catch(e){}
+  try{ localStorage.setItem('stp_v12',JSON.stringify(keys)); }catch(e){}
   buildSettings(); updateKeyUI();
   showToast('✅ Keys saved','success');
   addLog('Keys — Finnhub:'+(keys.finnhub?'✓':'✗')+' Alpaca:'+(keys.alpacaKey?'✓':'✗')+' TG:'+(keys.tgToken?'✓':'✗'),'success');
@@ -644,7 +672,7 @@ function saveKeys(){
 }
 
 function loadKeys(){
-  try{ var s=localStorage.getItem('stp_v11'); if(s) keys=JSON.parse(s); }catch(e){}
+  try{ var s=localStorage.getItem('stp_v12'); if(s) keys=JSON.parse(s); }catch(e){}
   try{ var w=localStorage.getItem('stp_wl11'); if(w) watchlist=JSON.parse(w); }catch(e){}
   buildSettings(); updateKeyUI(); renderWatchlist();
 }
@@ -1121,7 +1149,12 @@ async function runAI(ticker, name, price, strategy, bt, mode, fhData){
   var btS=bt&&bt.count?bt.count+' trades, '+(bt.winRate!=null?bt.winRate+'% WR':'WR pending ≥5 trades')+', '+bt.avgReturn+'% avg':'no backtest data';
   var fhCtx=fhData?'Finnhub catalyst='+((fhData.newsGrade&&fhData.newsGrade.tier)||'?')+' dilution='+((fhData.dilGrade&&fhData.dilGrade.risk)||'?')+' sentiment='+fmt(fhData.sentiment&&fhData.sentiment.score,2):'no Finnhub';
   var checks=(strategy.checks||[]).map(function(c){return c.name+': '+(c.pass?'PASS':'FAIL')+' — '+c.note;}).join('\n');
-  var resp=await fetch('https://api.anthropic.com/v1/messages',{
+  // Use proxy if configured (needed when calling from browser — CORS)
+  // Otherwise try direct (works from localhost/some hosts)
+  var aiEndpoint = (keys.proxyUrl && keys.proxyUrl.trim())
+    ? keys.proxyUrl.trim().replace(/\/$/, '') + '/v1/messages'
+    : 'https://api.anthropic.com/v1/messages';
+  var resp=await fetch(aiEndpoint,{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
       model:'claude-sonnet-4-20250514',max_tokens:900,
@@ -1733,7 +1766,10 @@ async function runRanker(){
   var rnkSumm = rankings.map(function(r,i){ return (i+1)+'. '+r.label+' ('+r.score+'/100)'; }).join(', ');
   try{
     addLog('Ranker: requesting AI market verdict…','info');
-    var resp2 = await fetch('https://api.anthropic.com/v1/messages',{
+    var aiEp2 = (keys.proxyUrl && keys.proxyUrl.trim())
+      ? keys.proxyUrl.trim().replace(/\/$/, '') + '/v1/messages'
+      : 'https://api.anthropic.com/v1/messages';
+    var resp2 = await fetch(aiEp2,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         model:'claude-sonnet-4-20250514', max_tokens:600,
