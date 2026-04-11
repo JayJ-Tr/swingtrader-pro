@@ -1188,14 +1188,17 @@ async function runAI(ticker, name, price, strategy, bt, mode, fhData){
   var btS=bt&&bt.count?bt.count+' trades, '+(bt.winRate!=null?bt.winRate+'% WR':'WR pending ≥5 trades')+', '+bt.avgReturn+'% avg':'no backtest data';
   var fhCtx=fhData?'Finnhub catalyst='+((fhData.newsGrade&&fhData.newsGrade.tier)||'?')+' dilution='+((fhData.dilGrade&&fhData.dilGrade.risk)||'?')+' sentiment='+fmt(fhData.sentiment&&fhData.sentiment.score,2):'no Finnhub';
   var checks=(strategy.checks||[]).map(function(c){return c.name+': '+(c.pass?'PASS':'FAIL')+' — '+c.note;}).join('\n');
-  // AI routing: direct key > proxy URL > error
+  // AI routing: proxy URL first, then direct key, then error
   var aiEndpoint, aiHeaders;
-  if(keys.proxyUrl && keys.proxyUrl.trim()){
-    // Custom proxy (Cloudflare Worker etc) — most reliable
+  if(keys.anthropicKey && keys.anthropicKey.trim() && \!(keys.proxyUrl && keys.proxyUrl.trim())){
+    // Direct with key from HTTPS page
+    aiEndpoint = 'https://api.anthropic.com/v1/messages';
+    aiHeaders = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
+  } else if(keys.proxyUrl && keys.proxyUrl.trim()){
+    // Custom proxy (Cloudflare Worker etc)
     aiEndpoint = keys.proxyUrl.trim().replace(/\/$/,'') + '/v1/messages';
     aiHeaders = {'Content-Type':'application/json'};
   } else if(keys.anthropicKey && keys.anthropicKey.trim()){
-    // Direct with key — works on https:// hosted pages, blocked from file://
     aiEndpoint = 'https://api.anthropic.com/v1/messages';
     aiHeaders = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
   } else {
