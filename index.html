@@ -1197,7 +1197,7 @@ async function runAI(ticker, name, price, strategy, bt, mode, fhData){
   } else if(keys.proxyUrl && keys.proxyUrl.trim()){
     // Custom proxy (Cloudflare Worker etc)
     aiEndpoint = keys.proxyUrl.trim().replace(/\/$/,'') + '/v1/messages';
-    aiHeaders = {'Content-Type':'application/json'};
+    aiHeaders = {'Content-Type':'text/plain'};
   } else if(keys.anthropicKey && keys.anthropicKey.trim()){
     aiEndpoint = 'https://api.anthropic.com/v1/messages';
     aiHeaders = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
