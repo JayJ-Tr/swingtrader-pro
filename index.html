@@ -1190,7 +1190,7 @@ async function runAI(ticker, name, price, strategy, bt, mode, fhData){
   var checks=(strategy.checks||[]).map(function(c){return c.name+': '+(c.pass?'PASS':'FAIL')+' — '+c.note;}).join('\n');
   // AI routing: proxy URL first, then direct key, then error
   var aiEndpoint, aiHeaders;
-  if(keys.anthropicKey && keys.anthropicKey.trim() && \!(keys.proxyUrl && keys.proxyUrl.trim())){
+  if(keys.anthropicKey && keys.anthropicKey.trim() && !(keys.proxyUrl && keys.proxyUrl.trim())){
     // Direct with key from HTTPS page
     aiEndpoint = 'https://api.anthropic.com/v1/messages';
     aiHeaders = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
