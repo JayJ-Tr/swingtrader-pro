@@ -1204,7 +1204,7 @@ async function runAI(ticker, name, price, strategy, bt, mode, fhData){
   var resp=await fetch(aiEndpoint,{
     method:'POST',headers:aiHeaders,
     body:JSON.stringify({
-      model:'claude-sonnet-4-20250514',max_tokens:900,
+      model:'claude-sonnet-4-6',max_tokens:900,
       tools:[{type:'web_search_20250305',name:'web_search'}],
       system:'Swing trade analyst. Strategy: '+((MODES[mode]&&MODES[mode].label)||mode)+'. Return ONLY valid JSON, no markdown.',
       messages:[{role:'user',content:'Analyze $'+ticker+' ('+name+'), price $'+price+'.\nStrategy: '+((MODES[mode]&&MODES[mode].label)||mode)+'.\nChecks:\n'+checks+'\nBacktest: '+btS+'\n'+fhCtx+'\nSearch recent news.\nReturn: {"catalystTier":"A/B/C/X","catalystReason":"str","dilutionRisk":"CLEAN/WATCH/DANGER","dilutionNote":"str","score":1-10,"potentialScore":1-10,"potentialReason":"str","buyZone":"$X-$X","target1":"$X","target2":"$X","stopLoss":"$X","timeframe":"str","upside":"str","analysis":"2 sentences","risks":"1 sentence","newsHeadlines":["h1","h2","h3"]}'}]
@@ -1356,7 +1356,7 @@ async function runScreener(){
       ai=await runAI(c.ticker,c.name||c.ticker,snap.price,strat,bt,currentMode,fhData);
       addLog('[$'+c.ticker+'] ✅ AI: '+ai.score+'/10 | Potential: '+ai.potentialScore+'/10 | '+ai.catalystTier+'-tier','success');
     }catch(e){
-      addLog('[$'+c.ticker+'] AI offline — using Finnhub+technical signals','info');
+      addLog('[$'+c.ticker+'] AI offline — '+(e.message||e),'warn');
       ai=fallbackAI(c.ticker,snap.price,strat,currentMode,fhData);
     }
 
@@ -1834,7 +1834,7 @@ async function runRanker(){
     var resp2 = await fetch(aiEp2,{
       method:'POST', headers:aiH2,
       body: JSON.stringify({
-        model:'claude-sonnet-4-20250514', max_tokens:600,
+        model:'claude-sonnet-4-6', max_tokens:600,
         tools:[{type:'web_search_20250305',name:'web_search'}],
         system:'Professional swing trader and market analyst. Concise and data-driven. Return ONLY valid JSON.',
         messages:[{role:'user',content:'Market data ('+period+'): '+mktSumm+'\nRankings: '+rnkSumm+'\nSearch for current market conditions and major macro events this week.\nReturn JSON: {"conviction":"HIGH/MEDIUM/LOW","aiVerdict":"2 sentences","dayAdvice":"1 sentence","weekAdvice":"1 sentence","monthAdvice":"1 sentence","avoid":"what to avoid","macroNote":"key macro risk this week"}'}]
