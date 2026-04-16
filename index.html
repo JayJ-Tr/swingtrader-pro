@@ -510,7 +510,7 @@ input::placeholder{color:var(--faint)!important}
 // ════════════════════════════════════════════════════════
 // STATE
 // ════════════════════════════════════════════════════════
-var keys       = {finnhub:'', alpacaKey:'', alpacaSecret:'', tgToken:'', tgChat:'', proxyUrl:'', anthropicKey:''};
+var keys       = {finnhub:'', alpacaKey:'', alpacaSecret:'', tgToken:'', tgChat:'', proxyUrl:'', anthropicKey:'', geminiKey:''};
 var stocks     = [];
 var tradeLog   = [];
 var positions  = [];
@@ -564,13 +564,14 @@ var TIER = {
 };
 
 var SETTINGS_FIELDS = [
-  {k:'anthropicKey', label:'ANTHROPIC API KEY', ph:'sk-ant-...', link:'https://console.anthropic.com/settings/keys', ll:'Get key →', type:'password', note:'Required for AI analysis (catalyst grading, news search, strategy scoring). Get free credits at console.anthropic.com'},
+  {k:'geminiKey',   label:'GEMINI API KEY (free AI — recommended)', ph:'AIza...', link:'https://aistudio.google.com/app/apikey', ll:'Get free key →', type:'password', note:'Google Gemini 2.0 Flash — free 1,500 req/day, works directly in browser, no proxy needed. Recommended over Anthropic.'},
+  {k:'anthropicKey', label:'ANTHROPIC API KEY (optional fallback)', ph:'sk-ant-...', link:'https://console.anthropic.com/settings/keys', ll:'Get key →', type:'password', note:'Used only if no Gemini key. Requires paid credits. Use proxy URL below if you get CORS errors.'},
   {k:'finnhub',     label:'FINNHUB API KEY',      ph:'Your Finnhub key',         link:'https://finnhub.io/dashboard',   ll:'Get free key →',   note:'News, sentiment, insider signals. Free 60 req/min.'},
   {k:'alpacaKey',   label:'ALPACA PAPER KEY ID',  ph:'Paper account key ID',     link:'https://alpaca.markets',         ll:'Create account →', note:'Market data + paper trade execution. Paper keys, not live.'},
   {k:'alpacaSecret',label:'ALPACA PAPER SECRET',  ph:'Paper account secret',     link:'',ll:'',type:'password',                               note:'From Alpaca dashboard → Paper Trading → API Keys.'},
   {k:'tgToken',     label:'TELEGRAM BOT TOKEN',   ph:'e.g. 7123456:AAFxxx...',  link:'https://t.me/BotFather',         ll:'@BotFather →',     note:'Instant trade alerts on every execution.'},
   {k:'tgChat',      label:'TELEGRAM CHAT ID',     ph:'e.g. 123456789',           link:'',ll:'',                                               note:'api.telegram.org/bot{TOKEN}/getUpdates → find "id".'},
-  {k:'proxyUrl',    label:'ANTHROPIC PROXY URL (optional)',   ph:'https://your-worker.workers.dev', link:'https://dash.cloudflare.com',ll:'Setup guide →', note:'Cloudflare Worker proxy for AI analysis. See setup guide below. Free forever.'},
+  {k:'proxyUrl',    label:'ANTHROPIC PROXY URL (optional)',   ph:'https://your-worker.workers.dev', link:'https://dash.cloudflare.com',ll:'Setup guide →', note:'Cloudflare Worker proxy — only needed if using Anthropic key. Not needed for Gemini.'},
 ];
 
 // ── OPTIONS CHECKLIST ITEMS ──
@@ -1188,36 +1189,54 @@ async function runAI(ticker, name, price, strategy, bt, mode, fhData){
   var btS=bt&&bt.count?bt.count+' trades, '+(bt.winRate!=null?bt.winRate+'% WR':'WR pending ≥5 trades')+', '+bt.avgReturn+'% avg':'no backtest data';
   var fhCtx=fhData?'Finnhub catalyst='+((fhData.newsGrade&&fhData.newsGrade.tier)||'?')+' dilution='+((fhData.dilGrade&&fhData.dilGrade.risk)||'?')+' sentiment='+fmt(fhData.sentiment&&fhData.sentiment.score,2):'no Finnhub';
   var checks=(strategy.checks||[]).map(function(c){return c.name+': '+(c.pass?'PASS':'FAIL')+' — '+c.note;}).join('\n');
-  // AI routing: proxy URL first, then direct key, then error
-  var aiEndpoint, aiHeaders;
-  if(keys.anthropicKey && keys.anthropicKey.trim() && !(keys.proxyUrl && keys.proxyUrl.trim())){
-    // Direct with key from HTTPS page
-    aiEndpoint = 'https://api.anthropic.com/v1/messages';
-    aiHeaders = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
-  } else if(keys.proxyUrl && keys.proxyUrl.trim()){
-    // Custom proxy (Cloudflare Worker etc)
-    aiEndpoint = keys.proxyUrl.trim().replace(/\/$/,'') + '/v1/messages';
-    aiHeaders = {'Content-Type':'text/plain'};
-  } else if(keys.anthropicKey && keys.anthropicKey.trim()){
-    aiEndpoint = 'https://api.anthropic.com/v1/messages';
-    aiHeaders = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
-  } else {
-    throw new Error('Add your Anthropic API key in Settings to enable AI analysis');
-  }
-  var resp=await fetch(aiEndpoint,{
-    method:'POST',headers:aiHeaders,
-    body:JSON.stringify({
-      model:'claude-sonnet-4-6',max_tokens:900,
+  var modeLabel=(MODES[mode]&&MODES[mode].label)||mode;
+  var prompt='Analyze $'+ticker+' ('+name+'), price $'+price+'.\nStrategy: '+modeLabel+'.\nChecks:\n'+checks+'\nBacktest: '+btS+'\n'+fhCtx+'\nReturn ONLY valid JSON, no markdown:\n{"catalystTier":"A/B/C/X","catalystReason":"str","dilutionRisk":"CLEAN/WATCH/DANGER","dilutionNote":"str","score":1-10,"potentialScore":1-10,"potentialReason":"str","buyZone":"$X-$X","target1":"$X","target2":"$X","stopLoss":"$X","timeframe":"str","upside":"str","analysis":"2 sentences","risks":"1 sentence","newsHeadlines":["h1","h2","h3"]}';
 
-      system:'Swing trade analyst. Strategy: '+((MODES[mode]&&MODES[mode].label)||mode)+'. Return ONLY valid JSON, no markdown.',
-      messages:[{role:'user',content:'Analyze $'+ticker+' ('+name+'), price $'+price+'.\nStrategy: '+((MODES[mode]&&MODES[mode].label)||mode)+'.\nChecks:\n'+checks+'\nBacktest: '+btS+'\n'+fhCtx+'\nSearch recent news.\nReturn: {"catalystTier":"A/B/C/X","catalystReason":"str","dilutionRisk":"CLEAN/WATCH/DANGER","dilutionNote":"str","score":1-10,"potentialScore":1-10,"potentialReason":"str","buyZone":"$X-$X","target1":"$X","target2":"$X","stopLoss":"$X","timeframe":"str","upside":"str","analysis":"2 sentences","risks":"1 sentence","newsHeadlines":["h1","h2","h3"]}'}]
-    })
-  });
-  var data=await resp.json();
-  if(data.error) throw new Error(data.error.message);
-  var text=(data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
+  var resp, data, text;
+
+  // ── AI routing: Gemini (free, no CORS) → Anthropic proxy → Anthropic direct ──
+  if(keys.geminiKey && keys.geminiKey.trim()){
+    // Google Gemini 2.0 Flash — free 1,500 req/day, works directly from browser
+    resp = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+keys.geminiKey.trim(),
+      { method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          systemInstruction:{parts:[{text:'Swing trade analyst. Strategy: '+modeLabel+'. Return ONLY valid JSON, no markdown.'}]},
+          contents:[{parts:[{text:prompt}]}],
+          generationConfig:{temperature:0.3, maxOutputTokens:900}
+        }) }
+    );
+    data = await resp.json();
+    if(data.error) throw new Error('Gemini: '+data.error.message);
+    text = (data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text)||'';
+  } else if(keys.proxyUrl && keys.proxyUrl.trim()){
+    // Cloudflare Worker proxy (Anthropic via proxy)
+    resp = await fetch(keys.proxyUrl.trim().replace(/\/$/,'') + '/v1/messages',{
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:900,
+        system:'Swing trade analyst. Strategy: '+modeLabel+'. Return ONLY valid JSON, no markdown.',
+        messages:[{role:'user',content:prompt}]})
+    });
+    data = await resp.json();
+    if(data.error) throw new Error(data.error.message);
+    text = (data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
+  } else if(keys.anthropicKey && keys.anthropicKey.trim()){
+    // Direct Anthropic (may hit CORS on some browsers — use proxy URL instead)
+    resp = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST', headers:{'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:900,
+        system:'Swing trade analyst. Strategy: '+modeLabel+'. Return ONLY valid JSON, no markdown.',
+        messages:[{role:'user',content:prompt}]})
+    });
+    data = await resp.json();
+    if(data.error) throw new Error(data.error.message);
+    text = (data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
+  } else {
+    throw new Error('Add a Gemini API key in Settings to enable AI analysis (free at aistudio.google.com/app/apikey)');
+  }
+
   var m=text.replace(/```json|```/g,'').match(/\{[\s\S]*\}/);
-  if(!m) throw new Error('No JSON in response');
+  if(!m) throw new Error('No JSON in AI response');
   return JSON.parse(m[0]);
 }
 
@@ -1824,31 +1843,45 @@ async function runRanker(){
   var rnkSumm = rankings.map(function(r,i){ return (i+1)+'. '+r.label+' ('+r.score+'/100)'; }).join(', ');
   try{
     addLog('Ranker: requesting AI market verdict…','info');
-    var aiEp2, aiH2;
-    if(keys.proxyUrl && keys.proxyUrl.trim()){
-      aiEp2 = keys.proxyUrl.trim().replace(/\/$/,'') + '/v1/messages';
-      aiH2 = {'Content-Type':'application/json'};
+    var rankerPrompt = 'Market data ('+period+'): '+mktSumm+'\nStrategy rankings: '+rnkSumm+'\nBased on current market conditions, return ONLY valid JSON:\n{"conviction":"HIGH/MEDIUM/LOW","aiVerdict":"2 sentences","dayAdvice":"1 sentence","weekAdvice":"1 sentence","monthAdvice":"1 sentence","avoid":"what to avoid this week","macroNote":"key macro risk this week"}';
+    var txt2 = '', d3;
+
+    if(keys.geminiKey && keys.geminiKey.trim()){
+      // Gemini (free, no CORS)
+      var rg = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+keys.geminiKey.trim(),
+        { method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            systemInstruction:{parts:[{text:'Professional swing trader and market analyst. Concise and data-driven. Return ONLY valid JSON.'}]},
+            contents:[{parts:[{text:rankerPrompt}]}],
+            generationConfig:{temperature:0.3, maxOutputTokens:600}
+          }) }
+      );
+      d3 = await rg.json();
+      if(!d3.error) txt2 = (d3.candidates&&d3.candidates[0]&&d3.candidates[0].content&&d3.candidates[0].content.parts&&d3.candidates[0].content.parts[0]&&d3.candidates[0].content.parts[0].text)||'';
+    } else if(keys.proxyUrl && keys.proxyUrl.trim()){
+      var rp = await fetch(keys.proxyUrl.trim().replace(/\/$/,'') + '/v1/messages',{
+        method:'POST', headers:{'Content-Type':'text/plain'},
+        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,
+          system:'Professional swing trader and market analyst. Return ONLY valid JSON.',
+          messages:[{role:'user',content:rankerPrompt}]})
+      });
+      d3 = await rp.json();
+      if(!d3.error) txt2 = (d3.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
     } else if(keys.anthropicKey && keys.anthropicKey.trim()){
-      aiEp2 = 'https://api.anthropic.com/v1/messages';
-      aiH2 = {'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'};
+      var ra = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST', headers:{'Content-Type':'application/json','x-api-key':keys.anthropicKey.trim(),'anthropic-version':'2023-06-01'},
+        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,
+          system:'Professional swing trader and market analyst. Return ONLY valid JSON.',
+          messages:[{role:'user',content:rankerPrompt}]})
+      });
+      d3 = await ra.json();
+      if(!d3.error) txt2 = (d3.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
     } else {
-      throw new Error('Add Anthropic API key in Settings');
+      throw new Error('No AI key set');
     }
-    var resp2 = await fetch(aiEp2,{
-      method:'POST', headers:aiH2,
-      body: JSON.stringify({
-        model:'claude-sonnet-4-6', max_tokens:600,
-  
-        system:'Professional swing trader and market analyst. Concise and data-driven. Return ONLY valid JSON.',
-        messages:[{role:'user',content:'Market data ('+period+'): '+mktSumm+'\nRankings: '+rnkSumm+'\nSearch for current market conditions and major macro events this week.\nReturn JSON: {"conviction":"HIGH/MEDIUM/LOW","aiVerdict":"2 sentences","dayAdvice":"1 sentence","weekAdvice":"1 sentence","monthAdvice":"1 sentence","avoid":"what to avoid","macroNote":"key macro risk this week"}'}]
-      })
-    });
-    var d3 = await resp2.json();
-    if(!d3.error){
-      var txt2 = (d3.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
-      var m3 = txt2.replace(/```json|```/g,'').match(/\{[\s\S]*\}/);
-      if(m3) aiOp = JSON.parse(m3[0]);
-    }
+    var m3 = txt2.replace(/```json|```/g,'').match(/\{[\s\S]*\}/);
+    if(m3) aiOp = JSON.parse(m3[0]);
   }catch(e){ addLog('Ranker: AI offline — showing data-based rankings only','info'); }
 
   document.getElementById('rankerLoading').style.display='none';
